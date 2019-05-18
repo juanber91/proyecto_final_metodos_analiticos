@@ -39,22 +39,23 @@ for(i in 1:length(set_rutas)){
   #### Hacemos un dataframe con lo que se extrajo arriba
   res <- bind_rows(lapply(coords, as.data.frame), .id = 'ramal') %>% 
     rename(latitud = X1, longitud = X2) %>% 
-    mutate(ruta = paste(set_rutas[i], ramal, sep = "_")) %>% 
-    select(ruta,latitud,longitud) %>% 
+    mutate(ruta = set_rutas[i]) %>% 
+    select(ruta,ramal,latitud,longitud) %>% 
     unique() 
   
   res2 <- rbind(res2,res)
 }
 
-###
-
-res3 <- res2 %>% group_by(ruta) %>% mutate(nodo = ifelse(row_number() == 1, 1,0))
+### Etiqueto con uno el primer nodo
+res3 <- res2 %>% group_by(ruta,ramal) %>% mutate(nodo = ifelse(row_number() == 1, 1,0))
 
 current <- 1
 j <- 1
 
+### Etiquetar con uno aquellos nodos separados por una distancia de al menos r = 0.01
 while(current + j <= nrow(res3)) {
   
+  # Si es el primer punto de una ruta
   if(res3$nodo[current+j] == 1){
     current <- current + j
     j <- 1
@@ -71,8 +72,55 @@ while(current + j <= nrow(res3)) {
   
 }
 
-res3 <- res3 %>% group_by(ruta) %>% mutate(nodo = ifelse((row_number() == n()) | (nodo == 1), 1,0))
+### Etiqueto con uno el último nodo
+res3 <- res3 %>% group_by(ruta,ramal) %>% 
+          mutate(nodo = ifelse((row_number() == n()) | (nodo == 1), 1,0),
+                 ruta_ramal = paste(ruta,ramal,sep = "_"))
 
+### Obtenemos el nombre de las rutas que se intersectan en pares para después usar el resultado
+### y encontrar los puntos de interseccion más eficientemente
+intersecciones <- data.frame()
+for(i in 1:length(set_rutas)){
+  if(i+1 > length(set_rutas)){
+    break
+  }
+  for(j in (i+1):length(set_rutas)){
+    x <- res3 %>% filter(ruta == set_rutas[i]) 
+    y <- res3 %>% filter(ruta == set_rutas[j]) 
+    x_spatial <- SpatialLines(list(Lines(Line(cbind(x$latitud,x$longitud)), ID=set_rutas[i])))
+    y_spatial <- SpatialLines(list(Lines(Line(cbind(y$latitud,y$longitud)), ID=set_rutas[j])))
+    
+    if(gIntersects(x_spatial,y_spatial)){
+      intersecciones <- rbind(intersecciones,cbind(set_rutas[i],set_rutas[j]))
+    }
+    
+  }
+}
+
+### Ramales que intersectan
+intersecciones_ramales <- data.frame()
+for(i in 1:dim(intersecciones)[1]){
+  set_ramales_v1 <- res3 %>% filter(ruta == intersecciones$V1[i]) %>% pull(ruta_ramal) %>% unique()
+  set_ramales_v2 <- res3 %>% filter(ruta == intersecciones$V2[i]) %>% pull(ruta_ramal) %>% unique()
+  
+  for(j in 1:length(set_ramales_v1)){
+    print(paste0(i, ' --- ', j))
+    for(k in 1:length(set_ramales_v2)){
+      x <- res3 %>% filter(ruta_ramal == set_ramales_v1[j]) 
+      y <- res3 %>% filter(ruta_ramal == set_ramales_v2[k]) 
+      x_spatial <- SpatialLines(list(Lines(Line(cbind(x$latitud,x$longitud)), ID=set_ramales_v1[j])))
+      y_spatial <- SpatialLines(list(Lines(Line(cbind(y$latitud,y$longitud)), ID=set_ramales_v2[k])))
+      
+      if(gIntersects(x_spatial,y_spatial)){
+        intersecciones_ramales <- rbind(intersecciones_ramales,cbind(set_ramales_v1[j],set_ramales_v2[k]))
+      }
+    }
+  }
+}
+
+save(intersecciones_ramales,file="intersecciones_ramales.RData")
+
+### Filtramos por los nodos que nos interesan para no tomar la ruta completa
 res_filt <- res3 %>% 
   filter(nodo == 1)
 
