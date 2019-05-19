@@ -13,12 +13,12 @@ library('data.table')
 # Importamos datos 
 datos <- read_excel("data/rutas-y-corredores-del-transporte-publico-concesionado.xlsx")
 
-# Lo mismo pero en shapefile, veremos con cuál de los dos conviene trabajar
+# Lo mismo pero en shapefile, veremos con cuÃ¡l de los dos conviene trabajar
 datos.sf <- readOGR("data/prueba/rutas-y-corredores-del-transporte-publico-concesionado.shp")
 
 #### ---------------------------------------------------------------------
-#### La idea aquí es ir haciendo pruebas con subconjuntos de los datos,
-#### para eventualmente (cuando ya funcione) meterlo todo en una función.
+#### La idea aquÃ� es ir haciendo pruebas con subconjuntos de los datos,
+#### para eventualmente (cuando ya funcione) meterlo todo en una funciÃ³n.
 ####----------------------------------------------------------------------
 
 #### Hacemos un conjunto que contenga las rutas
@@ -34,8 +34,8 @@ for(i in 1:length(set_rutas)){
   #### El objeto datos.sf es muy complejo, extraemos las coordenadas.
   #### El resultado es una lista con las coordenadas de cada ramal
   coords <-  lapply(slot(ruta, "lines"), function(x)
-                    lapply(slot(x, "Lines"),function(y)
-                             slot(y, "coords")))
+    lapply(slot(x, "Lines"),function(y)
+      slot(y, "coords")))
   
   #### Hacemos un dataframe con lo que se extrajo arriba
   res <- bind_rows(lapply(coords, as.data.frame), .id = 'ramal') %>% 
@@ -46,6 +46,18 @@ for(i in 1:length(set_rutas)){
   
   res2 <- rbind(res2,res)
 }
+
+res2 %<>% 
+  group_by(ruta,ramal) %>% 
+  mutate(difs = n()) %>% 
+  group_by(ruta) %>% 
+  filter(difs <= 100) %>% 
+  dplyr::top_n(1,difs) %>% 
+  select(-difs) %>% 
+  ungroup 
+
+### Redefinimos set_rutas para solo aquellas que hayan sobrevivido al chasquido de Thanos
+set_rutas <- unique(res2$ruta)
 
 ### Etiqueto con uno el primer nodo
 res3 <- res2 %>% group_by(ruta,ramal) %>% mutate(nodo = ifelse(row_number() == 1, 1,0))
@@ -61,25 +73,25 @@ while(current + j <= nrow(res3)) {
     current <- current + j
     j <- 1
   } else {
-      distancia <- sqrt((res3$latitud[current + j] - res3$latitud[current])^2 + (res3$longitud[current + j] - res3$longitud[current])^2)
-      if (distancia < 0.01){
-        j <- j + 1
-      } else  {
-        res3$nodo[current + j] <- 1
-        current <- current + j
-        j <- 1
-      }
+    distancia <- sqrt((res3$latitud[current + j] - res3$latitud[current])^2 + (res3$longitud[current + j] - res3$longitud[current])^2)
+    if (distancia < 0.01){
+      j <- j + 1
+    } else  {
+      res3$nodo[current + j] <- 1
+      current <- current + j
+      j <- 1
+    }
   }
   
 }
 
-### Etiqueto con uno el último nodo
+### Etiqueto con uno el Ãºltimo nodo
 res3 <- res3 %>% group_by(ruta,ramal) %>% 
-          mutate(nodo = ifelse((row_number() == n()) | (nodo == 1), 1,0),
-                 ruta_ramal = paste(ruta,ramal,sep = "_"))
+  mutate(nodo = ifelse((row_number() == n()) | (nodo == 1), 1,0),
+         ruta_ramal = paste(ruta,ramal,sep = "_"))
 
-### Obtenemos el nombre de las rutas que se intersectan en pares para después usar el resultado
-### y encontrar los puntos de interseccion más eficientemente
+### Obtenemos el nombre de las rutas que se intersectan en pares para despuÃ©s usar el resultado
+### y encontrar los puntos de interseccion mÃ¡s eficientemente
 intersecciones <- data.frame()
 for(i in 1:length(set_rutas)){
   if(i+1 > length(set_rutas)){
@@ -118,25 +130,13 @@ for(i in 1:dim(intersecciones)[1]){
   }
 }
 
- 
-# save(intersecciones_ramales,file="intersecciones_ramales.RData")
-
-### Complementar res3 con las intersecciones
-# intersecciones_ramales <- data.frame('RUTA 32_3','RUTA 2_3', stringsAsFactors=FALSE)
-# colnames(intersecciones_ramales) <- c('V1','V2')
-
-load("intersecciones_ramales.RData")
-
-intersecciones_ramales <- intersecciones_ramales[1:12,]
-
 
 x_spatial <- vector()
 y_spatial <- vector()
 res4 <- res3
 tiempo <- Sys.time()
 for(i in 1:dim(intersecciones_ramales)[1]){
-  
-  
+
   x <- res4 %>% 
     filter(ruta_ramal == intersecciones_ramales$V1[i]) %>%
     mutate(lat_lag = lag(latitud),lon_lag = lag(longitud)) %>%
@@ -151,6 +151,10 @@ for(i in 1:dim(intersecciones_ramales)[1]){
     for(k in 1:dim(y)[1]){
       x_spatial <- SpatialLines(list(Lines(Line(cbind(rbind(x$latitud[j],x$lat_lag[j]),rbind(x$longitud[j],x$lon_lag[j]))), ID=paste(intersecciones_ramales$V1[i],j,sep="_"))))
       y_spatial <- SpatialLines(list(Lines(Line(cbind(rbind(y$latitud[k],y$lat_lag[k]),rbind(y$longitud[k],y$lon_lag[k]))), ID=paste(intersecciones_ramales$V2[i],k,sep="_"))))
+      
+      if(class(gIntersection(x_spatial,y_spatial))[1]=='SpatialLines'){
+        break
+      }
       
       if(gIntersects(x_spatial,y_spatial)){
         inter <- as.data.frame(gIntersection(x_spatial,y_spatial))
