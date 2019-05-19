@@ -102,9 +102,8 @@ intersecciones_ramales <- data.frame()
 for(i in 1:dim(intersecciones)[1]){
   set_ramales_v1 <- res3 %>% filter(ruta == intersecciones$V1[i]) %>% pull(ruta_ramal) %>% unique()
   set_ramales_v2 <- res3 %>% filter(ruta == intersecciones$V2[i]) %>% pull(ruta_ramal) %>% unique()
-  
+  print(i)
   for(j in 1:length(set_ramales_v1)){
-    print(paste0(i, ' --- ', j))
     for(k in 1:length(set_ramales_v2)){
       x <- res3 %>% filter(ruta_ramal == set_ramales_v1[j]) 
       y <- res3 %>% filter(ruta_ramal == set_ramales_v2[k]) 
@@ -119,6 +118,7 @@ for(i in 1:dim(intersecciones)[1]){
 }
 
 save(intersecciones_ramales,file="intersecciones_ramales.RData")
+
 
 ### Filtramos por los nodos que nos interesan para no tomar la ruta completa
 res_filt <- res3 %>% 
