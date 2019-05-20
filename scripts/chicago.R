@@ -10,7 +10,7 @@ library('ggraph')
 library('tidygraph')
 
 # Lo mismo pero en shapefile, veremos con cuál de los dos conviene trabajar
-datos.sf <- readOGR('C:/Users/juan_/Desktop/CTA_BusRoutes')
+datos.sf <- readOGR('data/CTA_BusRoutes')
 
 datos <- datos.sf@data %>% as.data.frame()
 
@@ -74,8 +74,7 @@ while(current + j <= nrow(res3)) {
 
 ### Etiqueto con uno el último nodo
 res3 <- res3 %>% group_by(ruta) %>% 
-  mutate(nodo = ifelse((row_number() == n()) | (nodo == 1), 1,0),
-         ruta_ramal = paste0(ruta))
+  mutate(nodo = ifelse((row_number() == n()) | (nodo == 1), 1,0))
 
 ### Obtenemos el nombre de las rutas que se intersectan en pares para después usar el resultado
 ### y encontrar los puntos de interseccion más eficientemente
@@ -98,31 +97,53 @@ for(i in 1:length(set_rutas)){
   }
 }
 
-### Ramales que intersectan
-intersecciones_ramales <- data.frame()
+### Hacemos las intersecciones
+x_spatial <- vector()
+y_spatial <- vector()
+res4 <- res3
+tiempo <- Sys.time()
 for(i in 1:dim(intersecciones)[1]){
-  set_ramales_v1 <- res3 %>% filter(ruta == intersecciones$V1[i]) %>% pull(ruta_ramal) %>% unique()
-  set_ramales_v2 <- res3 %>% filter(ruta == intersecciones$V2[i]) %>% pull(ruta_ramal) %>% unique()
   
-  for(j in 1:length(set_ramales_v1)){
-    print(paste0(i, ' --- ', j))
-    for(k in 1:length(set_ramales_v2)){
-      x <- res3 %>% filter(ruta_ramal == set_ramales_v1[j]) 
-      y <- res3 %>% filter(ruta_ramal == set_ramales_v2[k]) 
-      x_spatial <- SpatialLines(list(Lines(Line(cbind(x$latitud,x$longitud)), ID=set_ramales_v1[j])))
-      y_spatial <- SpatialLines(list(Lines(Line(cbind(y$latitud,y$longitud)), ID=set_ramales_v2[k])))
+  x <- res4 %>% 
+    filter(ruta_ramal == intersecciones$V1[i]) %>%
+    mutate(lat_lag = lag(latitud),lon_lag = lag(longitud)) %>%
+    na.omit()
+  
+  y <- res4 %>% 
+    filter(ruta_ramal == intersecciones$V2[i]) %>%
+    mutate(lat_lag = lag(latitud),lon_lag = lag(longitud)) %>%
+    na.omit()
+  
+  for(j in 1:dim(x)[1]){
+    for(k in 1:dim(y)[1]){
+      x_spatial <- SpatialLines(list(Lines(Line(cbind(rbind(x$latitud[j],x$lat_lag[j]),rbind(x$longitud[j],x$lon_lag[j]))), ID=paste(intersecciones$V1[i],j,sep="_"))))
+      y_spatial <- SpatialLines(list(Lines(Line(cbind(rbind(y$latitud[k],y$lat_lag[k]),rbind(y$longitud[k],y$lon_lag[k]))), ID=paste(intersecciones$V2[i],k,sep="_"))))
       
       if(gIntersects(x_spatial,y_spatial)){
-        intersecciones_ramales <- rbind(intersecciones_ramales,cbind(set_ramales_v1[j],set_ramales_v2[k]))
+        inter <- as.data.frame(gIntersection(x_spatial,y_spatial))
+        
+        x_coords <-  as.data.frame(lapply(slot(x_spatial, "lines"), function(x)
+          lapply(slot(x, "Lines"),function(y)
+            slot(y, "coords"))))
+        
+        y_coords <-  as.data.frame(lapply(slot(y_spatial, "lines"), function(x)
+          lapply(slot(x, "Lines"),function(y)
+            slot(y, "coords"))))
+        
+        aux_upper <- res4[1:which(res4$latitud==x_coords$X1[1] & res4$ruta_ramal==intersecciones$V1[i]),]
+        aux_lower <- res4[(which(res4$latitud==x_coords$X1[1] & res4$ruta_ramal==intersecciones$V1[i])+1):dim(res4)[1],]
+        aux_middle <- aux_upper[1,]
+        aux_middle[1,3:5] <- c(inter[1,1:2], 1)
+        
+        res4 <- bind_rows(aux_upper, aux_middle, aux_lower)
       }
+      
     }
   }
+  
+  print(paste(i, ' ---- ', as.numeric(Sys.time() - tiempo)))
 }
 
-save(intersecciones_ramales, file = "intersecciones_ramales_CHICAGO.RData")
-
-### Filtramos por los nodos que nos interesan para no tomar la ruta completa
-res_filt <- res3 %>% filter(nodo == 1)
 
 # res_filt %<>% 
 res_filt <- res_filt %>% 
