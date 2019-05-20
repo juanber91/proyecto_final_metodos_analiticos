@@ -148,12 +148,11 @@ for(i in 1:dim(intersecciones_ramales)[1]){
     na.omit()
   
   for(j in 1:dim(x)[1]){
+    x_spatial <- SpatialLines(list(Lines(Line(cbind(rbind(x$latitud[j],x$lat_lag[j]),rbind(x$longitud[j],x$lon_lag[j]))), ID=paste(intersecciones_ramales$V1[i],j,sep="_"))))
     for(k in 1:dim(y)[1]){
-      x_spatial <- SpatialLines(list(Lines(Line(cbind(rbind(x$latitud[j],x$lat_lag[j]),rbind(x$longitud[j],x$lon_lag[j]))), ID=paste(intersecciones_ramales$V1[i],j,sep="_"))))
       y_spatial <- SpatialLines(list(Lines(Line(cbind(rbind(y$latitud[k],y$lat_lag[k]),rbind(y$longitud[k],y$lon_lag[k]))), ID=paste(intersecciones_ramales$V2[i],k,sep="_"))))
-      
-      if(class(gIntersection(x_spatial,y_spatial))[1]=='SpatialLines'){
-        break
+      if((class(gIntersection(x_spatial,y_spatial))[1]=='SpatialLines') | is.null(gIntersection(x_spatial,y_spatial))){
+        next
       }
       
       if(gIntersects(x_spatial,y_spatial)){
@@ -188,6 +187,6 @@ for(i in 1:dim(intersecciones_ramales)[1]){
   print(paste(i, ' ---- ', as.numeric(Sys.time() - tiempo)))
 }
 
-# save(res4,file="Nodos_e_intersecciones.RData")
+ # save(res4,file="Nodos_e_intersecciones.RData")
 
 

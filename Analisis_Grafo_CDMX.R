@@ -50,7 +50,7 @@ res4 %>%
   coord_equal() +
   theme_minimal() +
   theme(panel.grid = element_blank(), 
-        # legend.position = 'none',
+        legend.position = 'none',
         axis.text = element_blank(),
         axis.title = element_blank())
 

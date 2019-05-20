@@ -13,12 +13,12 @@ library('data.table')
 # Importamos datos 
 datos <- read_excel("data/rutas-y-corredores-del-transporte-publico-concesionado.xlsx")
 
-# Lo mismo pero en shapefile, veremos con cuál de los dos conviene trabajar
+# Lo mismo pero en shapefile, veremos con cu??l de los dos conviene trabajar
 datos.sf <- readOGR("data/prueba/rutas-y-corredores-del-transporte-publico-concesionado.shp")
 
 #### ---------------------------------------------------------------------
-#### La idea aquí es ir haciendo pruebas con subconjuntos de los datos,
-#### para eventualmente (cuando ya funcione) meterlo todo en una función.
+#### La idea aqu?? es ir haciendo pruebas con subconjuntos de los datos,
+#### para eventualmente (cuando ya funcione) meterlo todo en una funci??n.
 ####----------------------------------------------------------------------
 
 #### Hacemos un conjunto que contenga las rutas
@@ -73,13 +73,13 @@ while(current + j <= nrow(res3)) {
   
 }
 
-### Etiqueto con uno el último nodo
+### Etiqueto con uno el ??ltimo nodo
 res3 <- res3 %>% group_by(ruta,ramal) %>% 
           mutate(nodo = ifelse((row_number() == n()) | (nodo == 1), 1,0),
                  ruta_ramal = paste(ruta,ramal,sep = "_"))
 
-### Obtenemos el nombre de las rutas que se intersectan en pares para después usar el resultado
-### y encontrar los puntos de interseccion más eficientemente
+### Obtenemos el nombre de las rutas que se intersectan en pares para despu??s usar el resultado
+### y encontrar los puntos de interseccion m??s eficientemente
 intersecciones <- data.frame()
 for(i in 1:length(set_rutas)){
   if(i+1 > length(set_rutas)){
@@ -148,12 +148,13 @@ for(i in 1:dim(intersecciones_ramales)[1]){
     na.omit()
   
   for(j in 1:dim(x)[1]){
+    x_spatial <- SpatialLines(list(Lines(Line(cbind(rbind(x$latitud[j],x$lat_lag[j]),rbind(x$longitud[j],x$lon_lag[j]))), ID=paste(intersecciones_ramales$V1[i],j,sep="_"))))
+    
     for(k in 1:dim(y)[1]){
-      x_spatial <- SpatialLines(list(Lines(Line(cbind(rbind(x$latitud[j],x$lat_lag[j]),rbind(x$longitud[j],x$lon_lag[j]))), ID=paste(intersecciones_ramales$V1[i],j,sep="_"))))
       y_spatial <- SpatialLines(list(Lines(Line(cbind(rbind(y$latitud[k],y$lat_lag[k]),rbind(y$longitud[k],y$lon_lag[k]))), ID=paste(intersecciones_ramales$V2[i],k,sep="_"))))
       
-      if(class(gIntersection(x_spatial,y_spatial))[1]=='SpatialLines'){
-        break
+      if((class(gIntersection(x_spatial,y_spatial))[1]=='SpatialLines') | is.null(gIntersection(x_spatial,y_spatial))){
+        next
       }
       
       if(gIntersects(x_spatial,y_spatial)){
