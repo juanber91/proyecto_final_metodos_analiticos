@@ -46,8 +46,25 @@ for(i in 1:length(set_rutas)){
   res2 <- rbind(res2,res)
 }
 
+# res2 %>% 
+#   group_by(ruta) %>% 
+#   mutate(difs = n()) %>% summarise(bla = max(difs)) %>% View
+#   filter(difs <= 100) %>% 
+#   dplyr::top_n(1,difs) %>% 
+#   select(-difs) %>% 
+#   ungroup 
+# 
+# ### Redefinimos set_rutas para solo aquellas que hayan sobrevivido al chasquido de Thanos
+# set_rutas <- unique(res2$ruta)
+
 ### Etiqueto con uno el primer nodo
-res3 <- res2 %>% group_by(ruta) %>% mutate(nodo = ifelse(row_number() == 1, 1,0))
+res3 <- res2 %>% 
+  group_by(ruta) %>% 
+  mutate(nodo = ifelse(row_number() == 1, 1,0)) %>% 
+  mutate_if(is.numeric, round, 0) %>% 
+  ungroup() %>% 
+  unique()
+  
 
 current <- 1
 j <- 1
@@ -61,7 +78,7 @@ while(current + j <= nrow(res3)) {
     j <- 1
   } else {
     distancia <- sqrt((res3$latitud[current + j] - res3$latitud[current])^2 + (res3$longitud[current + j] - res3$longitud[current])^2)
-    if (distancia < 0.01){
+    if (distancia < 10000){
       j <- j + 1
     } else  {
       res3$nodo[current + j] <- 1
@@ -74,7 +91,9 @@ while(current + j <= nrow(res3)) {
 
 ### Etiqueto con uno el último nodo
 res3 <- res3 %>% group_by(ruta) %>% 
-  mutate(nodo = ifelse((row_number() == n()) | (nodo == 1), 1,0))
+  mutate(nodo = ifelse((row_number() == n()) | (nodo == 1), 1,0)) %>% 
+  filter(nodo == 1)
+
 
 ### Obtenemos el nombre de las rutas que se intersectan en pares para después usar el resultado
 ### y encontrar los puntos de interseccion más eficientemente
@@ -105,19 +124,28 @@ tiempo <- Sys.time()
 for(i in 1:dim(intersecciones)[1]){
   
   x <- res4 %>% 
-    filter(ruta_ramal == intersecciones$V1[i]) %>%
+    filter(ruta == intersecciones$V1[i]) %>%
     mutate(lat_lag = lag(latitud),lon_lag = lag(longitud)) %>%
     na.omit()
   
   y <- res4 %>% 
-    filter(ruta_ramal == intersecciones$V2[i]) %>%
+    filter(ruta == intersecciones$V2[i]) %>%
     mutate(lat_lag = lag(latitud),lon_lag = lag(longitud)) %>%
     na.omit()
   
   for(j in 1:dim(x)[1]){
     for(k in 1:dim(y)[1]){
+      
+      if((x$latitud[j] == x$lat_lag[j] & x$longitud[j] == x$lon_lag[j])|(y$latitud[k] == y$lat_lag[k] & y$longitud[k] == y$lon_lag[k])){
+        next
+      }
+      
       x_spatial <- SpatialLines(list(Lines(Line(cbind(rbind(x$latitud[j],x$lat_lag[j]),rbind(x$longitud[j],x$lon_lag[j]))), ID=paste(intersecciones$V1[i],j,sep="_"))))
       y_spatial <- SpatialLines(list(Lines(Line(cbind(rbind(y$latitud[k],y$lat_lag[k]),rbind(y$longitud[k],y$lon_lag[k]))), ID=paste(intersecciones$V2[i],k,sep="_"))))
+      
+      if((class(gIntersection(x_spatial,y_spatial))[1]=='SpatialLines') | is.null(gIntersection(x_spatial,y_spatial))){
+        next
+      }
       
       if(gIntersects(x_spatial,y_spatial)){
         inter <- as.data.frame(gIntersection(x_spatial,y_spatial))
@@ -130,10 +158,17 @@ for(i in 1:dim(intersecciones)[1]){
           lapply(slot(x, "Lines"),function(y)
             slot(y, "coords"))))
         
-        aux_upper <- res4[1:which(res4$latitud==x_coords$X1[1] & res4$ruta_ramal==intersecciones$V1[i]),]
-        aux_lower <- res4[(which(res4$latitud==x_coords$X1[1] & res4$ruta_ramal==intersecciones$V1[i])+1):dim(res4)[1],]
-        aux_middle <- aux_upper[1,]
-        aux_middle[1,3:5] <- c(inter[1,1:2], 1)
+        aux_upper <- res4[1:which(res4$latitud==x_coords$X1[1] & res4$ruta==intersecciones$V1[i]),]
+        aux_lower <- res4[(which(res4$latitud==x_coords$X1[1] & res4$ruta==intersecciones$V1[i])+1):dim(res4)[1],]
+        aux_middle <- aux_upper[nrow(aux_upper),]
+        aux_middle[1,2:4] <- c(inter[1,1:2], 1)
+        
+        res4 <- bind_rows(aux_upper, aux_middle, aux_lower)
+        
+        aux_upper <- res4[1:which(res4$latitud==y_coords$X1[1] & res4$ruta==intersecciones$V2[i]),]
+        aux_lower <- res4[(which(res4$latitud==y_coords$X1[1] & res4$ruta==intersecciones$V2[i])+1):dim(res4)[1],]
+        aux_middle <- aux_upper[nrow(aux_upper),]
+        aux_middle[1,2:4] <- c(inter[1,1:2], 1)
         
         res4 <- bind_rows(aux_upper, aux_middle, aux_lower)
       }
@@ -145,8 +180,10 @@ for(i in 1:dim(intersecciones)[1]){
 }
 
 
-# res_filt %<>% 
-res_filt <- res_filt %>% 
+### Filtramos por los nodos que nos interesan para no tomar la ruta completa
+res_filt <- res4
+
+res_filt %<>% 
   mutate(lat_lag = lag(latitud),
          lon_lag = lag(longitud)) %>% 
   na.omit()
@@ -157,7 +194,7 @@ froms = paste(res_filt$latitud, res_filt$longitud)
 tos = paste(res_filt$lat_lag, res_filt$lon_lag)
 
 graph <- graph.edgelist(cbind(froms, tos), directed = FALSE)
-graph_from_edgelist(cbind(froms, tos), directed = F)
+graph_from_edgelist(cbind(froms, tos))
 
 imps <- graph %>% as_tbl_graph() %>% 
   activate(edges) %>%
@@ -166,22 +203,17 @@ imps <- graph %>% as_tbl_graph() %>%
   mutate(importancia = centrality_betweenness(directed = F)) %>% 
   arrange(-importancia) 
 
+
 importancias <- imps %>% as.data.frame() %>% 
   separate(name, c('latitud', 'longitud'), sep = ' ') %>% 
   mutate_at(vars(latitud, longitud), funs(as.numeric))
 
-plot(subset(datos.sf, ROUTE == '108'))
-
 res2 %>% 
-  mutate_if(is.numeric, round, 0) %>% 
-  unique() %>% 
-  filter(ruta %in% c('108')) %>% #count(latitud) %>% 
   ggplot(aes(latitud, longitud)) +
-  geom_path(aes(group = ruta), size = 0.5) + 
-  geom_point() +
-  # geom_point(data = importancias, size = 0.1,
-  #              aes(latitud, longitud),#, size = importancia),
-  #            alpha = 0.3) +
+  geom_path(aes(color = ruta, group = ruta), size = 1.3, alpha = 0.4) + 
+  geom_point(data = importancias,
+             aes(latitud, longitud, size = importancia),
+             alpha = 0.3) +
   coord_equal() +
   theme_minimal() +
   theme(panel.grid = element_blank(), 
@@ -191,9 +223,10 @@ res2 %>%
 
 importancias$importancia %>% summary
 
-# ggraph(graph, layout = 'fr') +
-#   geom_edge_link(alpha=0.2) +
-#   geom_node_point(colour = 'salmon') +
-#   theme_graph(base_family = 'sans')
+ggraph(graph, layout = 'fr') +
+  geom_edge_link(alpha=0.2) +
+  geom_node_point(colour = 'salmon') +
+  theme_graph(base_family = 'sans')
 
-ggsave(file = 'chicago.png', width = 12, height = 18, units = 'cm')
+ggsave(file = 'cerebro2.png', width = 12, height = 12, units = 'cm')
+
