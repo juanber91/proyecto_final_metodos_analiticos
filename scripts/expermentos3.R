@@ -181,6 +181,7 @@ for(i in 1:dim(intersecciones_ramales)[1]){
   print(paste(i, ' ---- ', as.numeric(Sys.time() - tiempo)))
 }
 
+# save(res4,file="Nodos_e_intersecciones.RData")
 
 
 ### Filtramos por los nodos que nos interesan para no tomar la ruta completa
