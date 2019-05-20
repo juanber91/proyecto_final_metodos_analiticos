@@ -13,12 +13,12 @@ library('data.table')
 # Importamos datos 
 datos <- read_excel("data/rutas-y-corredores-del-transporte-publico-concesionado.xlsx")
 
-# Lo mismo pero en shapefile, veremos con cuÃ¡l de los dos conviene trabajar
+# Lo mismo pero en shapefile, veremos con cu????l de los dos conviene trabajar
 datos.sf <- readOGR("data/prueba/rutas-y-corredores-del-transporte-publico-concesionado.shp")
 
 #### ---------------------------------------------------------------------
-#### La idea aquÃ� es ir haciendo pruebas con subconjuntos de los datos,
-#### para eventualmente (cuando ya funcione) meterlo todo en una funciÃ³n.
+#### La idea aqu??? es ir haciendo pruebas con subconjuntos de los datos,
+#### para eventualmente (cuando ya funcione) meterlo todo en una funci????n.
 ####----------------------------------------------------------------------
 
 #### Hacemos un conjunto que contenga las rutas
@@ -85,13 +85,13 @@ while(current + j <= nrow(res3)) {
   
 }
 
-### Etiqueto con uno el Ãºltimo nodo
+### Etiqueto con uno el ????ltimo nodo
 res3 <- res3 %>% group_by(ruta,ramal) %>% 
   mutate(nodo = ifelse((row_number() == n()) | (nodo == 1), 1,0),
          ruta_ramal = paste(ruta,ramal,sep = "_"))
 
-### Obtenemos el nombre de las rutas que se intersectan en pares para despuÃ©s usar el resultado
-### y encontrar los puntos de interseccion mÃ¡s eficientemente
+### Obtenemos el nombre de las rutas que se intersectan en pares para despu????s usar el resultado
+### y encontrar los puntos de interseccion m????s eficientemente
 intersecciones <- data.frame()
 for(i in 1:length(set_rutas)){
   if(i+1 > length(set_rutas)){
@@ -169,7 +169,14 @@ for(i in 1:dim(intersecciones_ramales)[1]){
         
         aux_upper <- res4[1:which(res4$latitud==x_coords$X1[1] & res4$ruta_ramal==intersecciones_ramales$V1[i]),]
         aux_lower <- res4[(which(res4$latitud==x_coords$X1[1] & res4$ruta_ramal==intersecciones_ramales$V1[i])+1):dim(res4)[1],]
-        aux_middle <- aux_upper[1,]
+        aux_middle <- aux_upper[nrow(aux_upper),]
+        aux_middle[1,3:5] <- c(inter[1,1:2], 1)
+        
+        res4 <- bind_rows(aux_upper, aux_middle, aux_lower)
+        
+        aux_upper <- res4[1:which(res4$latitud==y_coords$X1[1] & res4$ruta_ramal==intersecciones_ramales$V2[i]),]
+        aux_lower <- res4[(which(res4$latitud==y_coords$X1[1] & res4$ruta_ramal==intersecciones_ramales$V2[i])+1):dim(res4)[1],]
+        aux_middle <- aux_upper[nrow(aux_upper),]
         aux_middle[1,3:5] <- c(inter[1,1:2], 1)
         
         res4 <- bind_rows(aux_upper, aux_middle, aux_lower)
@@ -184,53 +191,3 @@ for(i in 1:dim(intersecciones_ramales)[1]){
 # save(res4,file="Nodos_e_intersecciones.RData")
 
 
-### Filtramos por los nodos que nos interesan para no tomar la ruta completa
-res_filt <- res3 %>% 
-  filter(nodo == 1)
-
-res_filt %<>% 
-  mutate(lat_lag = lag(latitud),
-         lon_lag = lag(longitud)) %>% 
-  na.omit()
-
-res_filt %>% head
-
-froms = paste(res_filt$latitud, res_filt$longitud)
-tos = paste(res_filt$lat_lag, res_filt$lon_lag)
-
-graph <- graph.edgelist(cbind(froms, tos), directed = FALSE)
-graph_from_edgelist(cbind(froms, tos))
-
-imps <- graph %>% as_tbl_graph() %>% 
-  activate(edges) %>%
-  mutate(weight = 1) %>%
-  activate(nodes) %>% 
-  mutate(importancia = centrality_betweenness(directed = F)) %>% 
-  arrange(-importancia) 
-
-
-importancias <- imps %>% as.data.frame() %>% 
-  separate(name, c('latitud', 'longitud'), sep = ' ') %>% 
-  mutate_at(vars(latitud, longitud), funs(as.numeric))
-
-res3 %>% 
-  ggplot(aes(latitud, longitud)) +
-  geom_path(aes(color = ruta), size = 1.3, alpha = 0.4) + 
-  geom_point(data = importancias,
-             aes(latitud, longitud, size = importancia),
-             alpha = 0.3) +
-  coord_equal() +
-  theme_minimal() +
-  theme(panel.grid = element_blank(), 
-        legend.position = 'none',
-        axis.text = element_blank(),
-        axis.title = element_blank())
-
-importancias$importancia %>% summary
-
-ggraph(graph, layout = 'fr') +
-  geom_edge_link(alpha=0.2) +
-  geom_node_point(colour = 'salmon') +
-  theme_graph(base_family = 'sans')
-
-ggsave(file = 'cerebro2.png', width = 12, height = 12, units = 'cm')
