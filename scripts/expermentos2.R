@@ -22,7 +22,7 @@ rawplot <- plot(datos.sf)
 ####----------------------------------------------------------------------
 
 #### Tomamos solamente una ruta para visualizar mejor lo que estamos haciendo
-ruta <- 'RUTA 2'
+ruta <- 'RUTA 100'
 ruta1 <- subset(datos.sf, ruta_corre == ruta)
 # ruta1 <- datos.sf
 
@@ -39,6 +39,14 @@ set.seed(1234)
 res2 <- bind_rows(lapply(coords, as.data.frame), .id = 'ramal') %>% 
   rename(latitud = X1, longitud = X2) %>% 
   unique() 
+
+# res2 %<>% 
+res2 %>% 
+  group_by(ruta, ramal) %>% 
+  mutate(difs = n()) %>% 
+  group_by(ruta) %>% 
+  dplyr::top_n(1, difs) %>% summary
+  select(-difs)
 
 res2 %>% head
 
@@ -69,10 +77,11 @@ while(current + j <= nrow(res3)) {
 res_filt <- res3 %>% 
   filter(nodo == 1)
 
+library(magrittr)
+
 res_filt %<>% 
   mutate(lat_lag = lag(latitud),
-         lon_lag = lag(longitud)) %>% 
-  na.omit()
+         lon_lag = lag(longitud))
 
 res_filt %>% head
 
@@ -80,12 +89,13 @@ froms = paste(res_filt$latitud, res_filt$longitud)
 tos = paste(res_filt$lat_lag, res_filt$lon_lag)
 
 graph = graph.edgelist(cbind(froms, tos), directed = FALSE)
-graph_from_edgelist(cbind(froms, tos))
+
 
 imps <- graph %>% as_tbl_graph() %>% 
   activate(edges) %>%
   mutate(weight = 1) %>%
   activate(nodes) %>% 
+  filter(name != 'NA NA') %>% 
   mutate(importancia = centrality_betweenness(directed = F)) %>% 
   arrange(-importancia) 
 
@@ -94,24 +104,32 @@ importancias <- imps %>% as.data.frame() %>%
   separate(name, c('latitud', 'longitud'), sep = ' ') %>% 
   mutate_at(vars(latitud, longitud), funs(as.numeric))
 
-res3 %>% 
-  ggplot(aes(latitud, longitud)) +
-  geom_path(aes(color = ramal), size = 1.3, alpha = 0.4) + 
-  geom_point(data = importancias,
-             aes(latitud, longitud, size = importancia),
-             alpha = 0.3) +
-  coord_equal() +
-  theme_minimal() +
-  theme(panel.grid = element_blank(), 
-        legend.position = 'none',
-        axis.text = element_blank(),
-        axis.title = element_blank())
+# res3 %>% 
+#   ggplot(aes(latitud, longitud)) +
+#   geom_path(aes(color = ramal), size = 1.3, alpha = 0.4) + 
+#   geom_point(data = importancias,
+#              aes(latitud, longitud, size = importancia),
+#              alpha = 0.3) +
+#   coord_equal() +
+#   theme_minimal() +
+#   theme(panel.grid = element_blank(), 
+#         legend.position = 'none',
+#         axis.text = element_blank(),
+#         axis.title = element_blank())
+# 
+# importancias$importancia %>% summary
 
-importancias$importancia %>% summary
 
+# ggraph(graph, layout = 'linear', circular = TRUE) +
 ggraph(graph, layout = 'fr') +
   geom_edge_link(alpha=0.2) +
   geom_node_point(colour = 'salmon') +
   theme_graph(base_family = 'sans')
 
-ggsave(file = 'cerebro.png', width = 12, height = 12, units = 'cm')
+# ggraph(as.igraph(imps),layout = 'linear', circular = TRUE) +
+ggraph(as.igraph(imps),layout = 'fr') +
+  geom_edge_link(alpha=0.2) +
+  geom_node_point(colour = 'salmon') +
+  theme_graph(base_family = 'sans')
+
+# ggsave(file = 'cerebro.png', width = 12, height = 12, units = 'cm')
